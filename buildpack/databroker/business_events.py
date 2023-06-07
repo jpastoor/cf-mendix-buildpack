@@ -1,13 +1,12 @@
-#
-# [EXPERIMENTAL]
-#
-# Extract Business Events configuration from vcap services and create mx constants
-#
-
-from buildpack import util
+"""
+[EXPERIMENTAL]
+Extract Business Events configuration from vcap services and create mx constants
+"""
 
 import logging
 import requests
+
+from buildpack import util
 
 CONSTANTS_PREFIX = "BusinessEvents"
 
@@ -63,8 +62,8 @@ def _get_config(vcap_services, existing_constants):
             if "kafka" in service_name:
                 if len(service_creds) > 1:
                     logging.warning(
-                        "Business Events: multiple configurations found for kafka."
-                        + "Using the first config from list"
+                        "Business Events: multiple configurations found for kafka. "
+                        "Using the first config from list"
                     )
                 if (
                     "credentials" in service_creds[0]
@@ -72,9 +71,7 @@ def _get_config(vcap_services, existing_constants):
                 ):
                     kafka_creds = service_creds[0]["credentials"]
                     if CLIENT_CONFIG_URL_KEY in kafka_creds:
-                        auth_token = kafka_creds.get(
-                            "ClientConfigAuthToken", ""
-                        )
+                        auth_token = kafka_creds.get("ClientConfigAuthToken", "")
                         for constant in BE_CONSTANTS_TO_INJECT:
                             be_config[
                                 f"{CONSTANTS_PREFIX}.{constant}"
@@ -93,19 +90,17 @@ def _get_config(vcap_services, existing_constants):
                             ] = kafka_creds.get(OPTIONAL_CONSTANT_APPLY_LIMITS)
                     else:
                         logging.error(
-                            "Business Events: configuration is not compatible, please unbind and bind the service again"
+                            "Business Events: configuration is not compatible, "
+                            "please unbind and bind the service again"
                         )
                 else:
                     logging.error("Business Events: configuration is empty")
 
                 # Update Business Events constants for metrics
-                _configure_business_events_metrics(
-                    be_config, existing_constants
-                )
+                _configure_business_events_metrics(be_config, existing_constants)
     except Exception as ex:
         logging.error(
-            "Business Events: error reading deployment configuration "
-            + str(ex)
+            "Business Events: error reading deployment configuration %s", str(ex)
         )
 
     return be_config

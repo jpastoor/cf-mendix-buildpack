@@ -1,6 +1,5 @@
 import os
 from unittest.mock import patch
-from urllib.parse import urljoin
 
 from buildpack.telemetry import dynatrace
 from unittest import TestCase
@@ -38,7 +37,7 @@ class TestDynatrace(TestCase):
             "DT_PAAS_TOKEN": token,
             "DT_SAAS_URL": url,
             "DT_TENANT": tenant,
-            "DT_IS_MANAGED": "true"
+            "DT_IS_MANAGED": "true",
         }
 
         with patch.dict(os.environ, env_vars):

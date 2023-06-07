@@ -16,14 +16,10 @@ class LoggingHeartbeatEmitterThread(threading.Thread):
         self.interval = interval
 
     def run(self):
-        logging.debug(
-            "Starting metrics emitter with interval %d", self.interval
-        )
+        logging.debug("Starting metrics emitter with interval %d", self.interval)
         counter = 1
         while True:
-            logging.info(
-                "MENDIX-LOGGING-HEARTBEAT: Heartbeat number %s", counter
-            )
+            logging.info("MENDIX-LOGGING-HEARTBEAT: Heartbeat number %s", counter)
             time.sleep(self.interval)
             counter += 1
 
@@ -85,7 +81,9 @@ def _redirect_logs():
         log_filter_thread.start()
 
 
-def get_loglevels(env=os.environ):
+def get_loglevels(env=None):
+    if env is None:
+        env = os.environ
     # Get log levels per node from environment
     for k, v in env.items():
         if k.startswith("LOGGING_CONFIG"):
@@ -100,20 +98,18 @@ def run(m2ee):
     _redirect_logs()
 
     # Start the logging heartbeat
-    logging_interval = os.getenv(
-        "METRICS_LOGGING_HEARTBEAT_INTERVAL", str(3600)
-    )
+    logging_interval = os.getenv("METRICS_LOGGING_HEARTBEAT_INTERVAL", str(3600))
     thread = LoggingHeartbeatEmitterThread(int(logging_interval))
-    thread.setDaemon(True)
+    thread.daemon = True
     thread.start()
 
 
 def stage(buildpack_dir, build_dir, cache_dir):
     logging.debug("Staging logging...")
-    NAMESPACE = ARTIFACT = "mendix-logfilter"
+    namespace = "mendix-logfilter"
     util.resolve_dependency(
-        "logs.%s" % NAMESPACE,
-        os.path.join(build_dir, ".local", NAMESPACE),
+        f"logs.{namespace}",
+        os.path.join(build_dir, ".local", namespace),
         buildpack_dir=buildpack_dir,
         cache_dir=cache_dir,
     )

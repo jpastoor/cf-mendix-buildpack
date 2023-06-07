@@ -20,12 +20,8 @@ def get_config():
     # In case we find MXRUNTIME_Database.... values we don't interfere and
     # return nothing. VCAP or DATABASE_URL return m2ee configuration
 
-    if any(
-        [x.startswith("MXRUNTIME_Database") for x in list(os.environ.keys())]
-    ):
-        logging.debug(
-            "Detected database configuration using custom runtime settings."
-        )
+    if any([x.startswith("MXRUNTIME_Database") for x in list(os.environ.keys())]):
+        logging.debug("Detected database configuration using custom runtime settings.")
         return None
 
     factory = DatabaseConfigurationFactory()
@@ -51,16 +47,12 @@ class DatabaseConfigurationFactory:
 
     def get_instance(self):
         # explicit detect supported configurations
-        if self.present_in_vcap(
-            "hana", tags=["hana", "database", "relational"]
-        ):
+        if self.present_in_vcap("hana", tags=["hana", "database", "relational"]):
             return SapHanaDatabaseConfiguration(
                 self.vcap_services["hana"][0]["credentials"]
             )
 
-        if self.present_in_vcap(
-            "hanatrial", tags=["hana", "database", "relational"]
-        ):
+        if self.present_in_vcap("hanatrial", tags=["hana", "database", "relational"]):
             return SapHanaDatabaseConfiguration(
                 self.vcap_services["hanatrial"][0]["credentials"]
             )
@@ -114,9 +106,7 @@ class DatabaseConfigurationFactory:
             "postgresql_shared",
         ):
             if vcap_services and service_type_name in vcap_services:
-                return vcap_services[service_type_name][0]["credentials"][
-                    "uri"
-                ]
+                return vcap_services[service_type_name][0]["credentials"]["uri"]
 
         if "azure-sqldb" in vcap_services:
             return vcap_services["azure-sqldb"][0]["credentials"]["jdbcUrl"]
@@ -195,8 +185,7 @@ class DatabaseConfiguration(ABC):
             return params
         except Exception:
             logging.warning(
-                "Invalid JSON string for DATABASE_CONNECTION_PARAMS."
-                "Ignoring value."
+                "Invalid JSON string for DATABASE_CONNECTION_PARAMS." "Ignoring value."
             )
             return {}
 
@@ -263,8 +252,8 @@ class UrlDatabaseConfiguration(DatabaseConfiguration):
 
     def init(self):
         patterns = [
-            r"(?P<type>[a-zA-Z0-9]+)://(?P<user>[^:]+):(?P<password>[^@]+)@(?P<host>[^/]+)/(?P<dbname>[^?]*)(?P<extra>\?.*)?",  # noqa: E501
-            r"jdbc:(?P<type>[a-zA-Z0-9]+)://(?P<host>[^;]+);database=(?P<dbname>[^;]*);user=(?P<user>[^;]+);password=(?P<password>.*)$",  # noqa: E501
+            r"(?P<type>[a-zA-Z0-9]+)://(?P<user>[^:]+):(?P<password>[^@]+)@(?P<host>[^/]+)/(?P<dbname>[^?]*)(?P<extra>\?.*)?",  # noqa: line-too-long
+            r"jdbc:(?P<type>[a-zA-Z0-9]+)://(?P<host>[^;]+);database=(?P<dbname>[^;]*);user=(?P<user>[^;]+);password=(?P<password>.*)$",  # noqa: line-too-long
         ]
 
         supported_databases = {
@@ -280,15 +269,11 @@ class UrlDatabaseConfiguration(DatabaseConfiguration):
             if match is not None:
                 break
         else:
-            raise Exception(
-                "Could not parse database credentials from database URI"
-            )
+            raise Exception("Could not parse database credentials from database URI")
 
         database_type_input = match.group("type")
         if database_type_input not in supported_databases:
-            raise Exception(
-                "Unknown database type: {}".format(database_type_input)
-            )
+            raise Exception(f"Unknown database type: {database_type_input}")
         database_type = supported_databases[database_type_input]
 
         config = {
@@ -328,25 +313,17 @@ class UrlDatabaseConfiguration(DatabaseConfiguration):
             jdbc_params.update({"sslmode": "verify-full"})
 
         if database_type == "PostgreSQL" and not self.url.startswith("jdbc:"):
-            self.extract_inline_cert(
-                jdbc_params, self.SSLCERT, "postgresql.crt"
-            )
-            self.extract_inline_cert(
-                jdbc_params, self.SSLKEY, "postgresql.pk8"
-            )
+            self.extract_inline_cert(jdbc_params, self.SSLCERT, "postgresql.crt")
+            self.extract_inline_cert(jdbc_params, self.SSLKEY, "postgresql.pk8")
             self.extract_inline_cert(jdbc_params, self.SSLROOTCERT, "root.crt")
 
-        extra_url_params_str = self.env_vars.get(
-            "DATABASE_CONNECTION_PARAMS", "{}"
-        )
+        extra_url_params_str = self.env_vars.get("DATABASE_CONNECTION_PARAMS", "{}")
         if extra_url_params_str is not None:
             try:
                 extra_url_params = json.loads(extra_url_params_str)
                 jdbc_params.update(extra_url_params)
             except Exception:
-                logging.warning(
-                    "Invalid JSON string for DATABASE_CONNECTION_PARAMS"
-                )
+                logging.warning("Invalid JSON string for DATABASE_CONNECTION_PARAMS")
 
         # generate jdbc_url, might be None
         jdbc_url = self.get_jdbc_strings(self.url, config, jdbc_params)
@@ -371,12 +348,8 @@ class UrlDatabaseConfiguration(DatabaseConfiguration):
                 if inline.startswith("-----BEGIN"):
                     tmp_cert_file = self.create_cert_file(filename)
                     try:
-                        logging.debug(
-                            "extract %s to %s", param, tmp_cert_file.name
-                        )
-                        if inline.startswith(
-                            "-----BEGIN RSA PRIVATE KEY-----"
-                        ):
+                        logging.debug("extract %s to %s", param, tmp_cert_file.name)
+                        if inline.startswith("-----BEGIN RSA PRIVATE KEY-----"):
                             self.to_pk8(inline, tmp_cert_file)
                         else:
                             tmp_cert_file.write(inline.encode())
@@ -391,9 +364,7 @@ class UrlDatabaseConfiguration(DatabaseConfiguration):
 
     @classmethod
     def to_pk8(cls, inline, tmp_cert_file):
-        private_key = serialization.load_pem_private_key(
-            inline.encode(), password=None
-        )
+        private_key = serialization.load_pem_private_key(inline.encode(), password=None)
         keybytes = private_key.private_bytes(
             encoding=serialization.Encoding.DER,
             format=serialization.PrivateFormat.PKCS8,
@@ -424,15 +395,14 @@ class UrlDatabaseConfiguration(DatabaseConfiguration):
             return url
 
         if len(jdbc_params) > 0:
-            extra_jdbc_params = "?{}".format(urlencode(jdbc_params, True))
+            extra_jdbc_params = f"?{urlencode(jdbc_params, True)}"
         else:
             extra_jdbc_params = ""
 
         if config["DatabaseType"] == "PostgreSQL":
-            jdbc_url = "jdbc:postgresql://{}/{}{}".format(
-                config["DatabaseHost"],
-                config["DatabaseName"],
-                extra_jdbc_params,
+            jdbc_url = (
+                f"jdbc:postgresql://{config['DatabaseHost']}"
+                f"/{config['DatabaseName']}{extra_jdbc_params}"
             )
             return jdbc_url
 
@@ -495,15 +465,11 @@ class SapHanaDatabaseConfiguration(DatabaseConfiguration):
     def get_database_jdbc_url(self):
         """Return the database jdbc url for the M2EE configuration"""
         url = self.credentials.get("url", "")
-        pattern = r"jdbc:sap://(?P<host>[^:]+):(?P<port>[0-9]+)/?(?P<q>\?(?P<params>.*))?$"  # noqa:E501
+        pattern = r"jdbc:sap://(?P<host>[^:]+):(?P<port>[0-9]+)/?(?P<q>\?(?P<params>.*))?$"  # noqa:line-too-long
         match = re.search(pattern, url)
         if match is None:
-            logging.error(
-                "Unable to parse Hana JDBC url string for parameters"
-            )
-            raise Exception(
-                "Unable to parse Hana JDBC url string for parameters"
-            )
+            logging.error("Unable to parse Hana JDBC url string for parameters")
+            raise Exception("Unable to parse Hana JDBC url string for parameters")
 
         parameters = {}
         if match.group("q") is not None and match.group("params") is not None:
@@ -515,7 +481,7 @@ class SapHanaDatabaseConfiguration(DatabaseConfiguration):
         parameters.update(self.get_override_connection_params())
 
         if q is not None and len(parameters) > 0:
-            parameter_str = "?{}".format(urlencode(parameters, True))
+            parameter_str = f"?{urlencode(parameters, True)}"
             url = url.replace(q, parameter_str)
 
         return url

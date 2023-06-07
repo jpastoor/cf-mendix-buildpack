@@ -23,15 +23,21 @@ default_env = {
     # -- Environment variables for the integration
     # "DT_PAAS_TOKEN": required, also used for telegraf integration
     # "DT_SAAS_URL": required, also used for telegraf integration
-    "DT_TENANT": None,  # required for agent integration, dynatrace environment ID
-    "DT_TENANTTOKEN": None,  # optional, default value is get from manifest.json which is downloaded along with the agent installer
+    "DT_TENANT": None,  # required for agent integration, dynatrace envID
+    # optional, default value is get from manifest.json which is downloaded
+    # along with the agent installer
+    "DT_TENANTTOKEN": None,
     # -- Environment variables for orchestration
     "DT_CLUSTER_ID": None,  # optional, default not set
-    "DT_CUSTOM_PROP": None,  # optional metadata e.g. Department=Acceptance Stage=Sprint
+    # optional metadata e.g. Department=Acceptance Stage=Sprint
+    "DT_CUSTOM_PROP": None,
     # -- Environment variables for troubleshooting
     "DT_LOGSTREAM": "stdout",  # optional
-    "DT_LOGLEVELCON": None,  # Use this environment variable to define the console log level. Valid options are: NONE, SEVERE, and INFO.
-    "DT_AGENTACTIVE": None,  # Set to true or false to enable or disable OneAgent.
+    # Use this environment variable to define the console log level.
+    # Valid options are: NONE, SEVERE, and INFO.
+    "DT_LOGLEVELCON": None,
+    # Set to true or false to enable or disable OneAgent.
+    "DT_AGENTACTIVE": None,
 }
 
 
@@ -48,7 +54,8 @@ def stage(buildpack_dir, root_dir, cache_path):
                 cache_dir=cache_path,  # CACHE_DIR,
                 unpack=True,
                 overrides={
-                    # need to us rstrip because otherwise the download link formed with double slashes and it doesn't work
+                    # need to us rstrip because otherwise the download link
+                    # formed with double slashes and it doesn't work
                     "url": os.environ.get("DT_SAAS_URL").rstrip("/"),
                     "environment": os.environ.get("DT_TENANT"),
                     "token": os.environ.get("DT_PAAS_TOKEN"),
@@ -58,13 +65,11 @@ def stage(buildpack_dir, root_dir, cache_path):
                 # https://github.com/mendix/cf-mendix-buildpack/pull/562
                 ignore_cache=True,
             )
-        except Exception as e:
-            logging.warning(
-                "Dynatrace agent download and unpack failed", exc_info=True
-            )
+        except Exception:
+            logging.warning("Dynatrace agent download and unpack failed", exc_info=True)
 
 
-def update_config(m2ee, app_name):
+def update_config(m2ee):
     """
     Injects Dynatrace configuration to java runtime
     """
@@ -77,18 +82,14 @@ def update_config(m2ee, app_name):
     logging.info("Enabling Dynatrace OneAgent")
     try:
         manifest = get_manifest()
-    except Exception as e:
-        logging.warning(
-            "Failed to parse Dynatrace manifest file", exc_info=True
-        )
+    except Exception:
+        logging.warning("Failed to parse Dynatrace manifest file", exc_info=True)
         return
 
     agent_path = get_agent_path()
     logging.debug("Agent path: [%s]", agent_path)
     if not os.path.exists(agent_path):
-        raise Exception(
-            "Dynatrace Agent not found: {agent_path}".format(agent_path)
-        )
+        raise Exception(f"Dynatrace Agent not found: {agent_path}")
 
     # dynamic default
     default_env.update({"DT_TENANTTOKEN": manifest.get("tenantToken")})
@@ -104,7 +105,7 @@ def update_config(m2ee, app_name):
     util.upsert_javaopts(
         m2ee,
         [
-            "-agentpath:{path}".format(path=os.path.abspath(agent_path)),
+            f"-agentpath:{os.path.abspath(agent_path)}",
             "-Xshare:off",
         ],
     )
@@ -113,17 +114,15 @@ def update_config(m2ee, app_name):
 @lru_cache(maxsize=None)
 def get_manifest():
     manifest_path = os.path.join(BUILD_PATH, "manifest.json")
-    with open(manifest_path, "r") as f:
-        return json.load(f)
+    with open(manifest_path, "r") as file_handler:
+        return json.load(file_handler)
 
 
 def get_connection_endpoint():
     manifest = get_manifest()
     endpoints = manifest.get("communicationEndpoints", [])
     # prepend the DT_SAAS_URL because the communication endpoints might not be correct
-    endpoints.insert(
-        0, _join_url(os.environ.get("DT_SAAS_URL"), "communication")
-    )
+    endpoints.insert(0, _join_url(os.environ.get("DT_SAAS_URL"), "communication"))
     return ";".join(endpoints)
 
 
@@ -138,10 +137,7 @@ def get_agent_path():
 
 
 def is_telegraf_enabled():
-    return (
-        "DT_PAAS_TOKEN" in os.environ.keys()
-        and "DT_SAAS_URL" in os.environ.keys()
-    )
+    return "DT_PAAS_TOKEN" in os.environ.keys() and "DT_SAAS_URL" in os.environ.keys()
 
 
 def is_agent_enabled():

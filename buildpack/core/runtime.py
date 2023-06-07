@@ -17,7 +17,7 @@ from . import security
 
 BASE_PATH = os.getcwd()
 
-from lib.m2ee import logger
+from lib.m2ee import logger  # noqa: E402
 
 logger.setLevel(util.get_buildpack_loglevel())
 
@@ -29,18 +29,13 @@ logging.getLogger("m2ee").propagate = False
 
 
 def is_version_implemented(version):
-    if version.major >= 6:
-        return True
-
-    return False
+    return bool(version.major >= 6)
 
 
 def is_version_supported(version):
-    # Support for the latest three major versions: https://docs.mendix.com/releasenotes/studio-pro/lts-mts
-    if version.major >= 7:
-        return True
-
-    return False
+    # Support for the latest three major versions:
+    # https://docs.mendix.com/releasenotes/studio-pro/lts-mts
+    return bool(version.major >= 7)
 
 
 def is_version_maintained(version):
@@ -51,9 +46,12 @@ def is_version_maintained(version):
         return True
     if version.major == 9 and version.minor == 6:
         return True
-    if version.major == 9 and version.minor >= 12:
+    if version.major == 9 and version.minor == 12:
         return True
-
+    if version.major == 9 and version.minor == 18:
+        return True
+    if version.major == 9 and version.minor == 24:
+        return True
     return False
 
 
@@ -88,7 +86,7 @@ def resolve_runtime_dependency(
     if not destination:
         destination = os.path.join(build_dir, "runtimes")
     util.resolve_dependency(
-        "mendix.runtime.%s" % prefix,
+        f"mendix.runtime.{prefix}",
         destination,
         buildpack_dir=buildpack_dir,
         cache_dir=cache_dir,
@@ -112,9 +110,11 @@ def get_metadata_value(key, build_path=BASE_PATH):
 
 def get_runtime_version(build_path=BASE_PATH):
     result = get_metadata_value("RuntimeVersion", build_path)
-    if result == None:
+    if result is None:
         logging.debug(
-            "Cannot retrieve runtime version %s from metadata file, falling back to project file"
+            "Cannot retrieve runtime version %s from metadata file, "
+            "falling back to project file",
+            result,
         )
         mpr = util.get_mpr_file_from_dir(build_path)
         if not mpr:
@@ -131,12 +131,15 @@ def get_model_version(build_path=BASE_PATH):
     return get_metadata_value("ModelVersion", build_path)
 
 
-# Extracts REST request handler paths from the static Swagger templates included in the model binary
-# This is a workaround for the lack of proper REST request handler metadata in model/metadata.json
+# Extracts REST request handler paths from the static Swagger templates
+# included in the model binary
+# This is a workaround for the lack of proper REST request handler metadata
+# in model/metadata.json
 def get_rest_request_handler_paths(build_path=BASE_PATH):
     filename = os.path.join(build_path, "model", "model.mdp")
 
-    # Run the strings command line tool to extract Swagger templates from the model binary
+    # Run the strings command line tool
+    # to extract Swagger templates from the model binary
     output = (
         subprocess.check_output(
             ["strings", filename, "|", "grep", "swagger"],
@@ -177,25 +180,19 @@ def _activate_license():
     license_key = os.environ.get(
         "FORCED_LICENSE_KEY", os.environ.get("LICENSE_KEY", None)
     )
-    server_id = os.environ.get(
-        "FORCED_SERVER_ID", os.environ.get("SERVER_ID", None)
-    )
-    license_id = os.environ.get(
-        "FORCED_LICENSE_ID", os.environ.get("LICENSE_ID", None)
-    )
+    server_id = os.environ.get("FORCED_SERVER_ID", os.environ.get("SERVER_ID", None))
+    license_id = os.environ.get("FORCED_LICENSE_ID", os.environ.get("LICENSE_ID", None))
     if server_id:
-        logging.warning(
-            "SERVER_ID is deprecated, please use LICENSE_ID instead"
-        )
+        logging.warning("SERVER_ID is deprecated, please use LICENSE_ID instead")
 
     if not license_id:
         license_id = server_id
 
     if license_key is not None and license_id is not None:
         logging.debug("A license was supplied, activating...")
-        prefs_body = prefs_template.replace(
-            "{{LICENSE_ID}}", license_id
-        ).replace("{{LICENSE_KEY}}", license_key)
+        prefs_body = prefs_template.replace("{{LICENSE_ID}}", license_id).replace(
+            "{{LICENSE_KEY}}", license_key
+        )
         with open(os.path.join(prefs_dir, "prefs.xml"), "w") as prefs_file:
             prefs_file.write(prefs_body)
 
@@ -203,10 +200,7 @@ def _activate_license():
 def _get_scheduled_events(metadata):
     scheduled_events = os.getenv("SCHEDULED_EVENTS", None)
     # Scheduled events need to be enabled on every instance >= 9.12
-    if (
-        get_runtime_version() < MXVersion(9.12)
-        and not util.is_cluster_leader()
-    ):
+    if get_runtime_version() < MXVersion(9.12) and not util.is_cluster_leader():
         logging.debug(
             "This instance is not a cluster leader, disabling scheduled events..."
         )
@@ -220,8 +214,7 @@ def _get_scheduled_events(metadata):
     else:
         parsed_scheduled_events = scheduled_events.split(",")
         metadata_scheduled_events = [
-            scheduled_event["Name"]
-            for scheduled_event in metadata["ScheduledEvents"]
+            scheduled_event["Name"] for scheduled_event in metadata["ScheduledEvents"]
         ]
         result = []
         for scheduled_event in parsed_scheduled_events:
@@ -240,29 +233,26 @@ def _get_constants(metadata):
     constants = {}
 
     constants_from_json = {}
-    constants_json = os.environ.get(
-        "CONSTANTS", json.dumps(constants_from_json)
-    )
+    constants_json = os.environ.get("CONSTANTS", json.dumps(constants_from_json))
     try:
         constants_from_json = json.loads(constants_json)
     except Exception:
         logging.warning(
-            "Failed to parse model constant values due to invalid JSON, terminating application...",
+            "Failed to parse model constant values due to invalid JSON, "
+            "terminating application...",
             exc_info=True,
         )
         raise
 
     for constant in metadata["Constants"]:
         constant_name = constant["Name"]
-        env_name = "MX_%s" % constant_name.replace(".", "_")
-        value = os.environ.get(
-            env_name, constants_from_json.get(constant_name)
-        )
+        env_name = f"MX_{constant_name.replace('.', '_')}"
+        value = os.environ.get(env_name, constants_from_json.get(constant_name))
         if value is None:
             value = constant["DefaultValue"]
             logging.debug(
-                "Constant [%s] not found in environment, using default value..."
-                % constant_name
+                "Constant [%s] not found in environment, using default value...",
+                constant_name,
             )
         if constant["Type"] == "Integer":
             value = int(value)
@@ -304,8 +294,7 @@ def _get_license_subscription():
         if "mendix-platform" in vcap_services:
             subscription = vcap_services["mendix-platform"][0]
             logging.debug(
-                "Configuring license subscription for [%s]..."
-                % subscription["name"]
+                "Configuring license subscription for [%s]...", subscription["name"]
             )
             credentials = subscription["credentials"]
             return {
@@ -314,8 +303,8 @@ def _get_license_subscription():
                 "License.SubscriptionSecret": credentials["secret"],
                 "License.UseLicenseServer": True,
             }
-    except Exception as e:
-        logging.warning("Failed to configure license subscription: " + str(e))
+    except Exception as exc:
+        logging.warning("Failed to configure license subscription: %s", str(exc))
     return {}
 
 
@@ -326,14 +315,14 @@ def _get_custom_runtime_settings():
     )
     try:
         custom_runtime_settings = json.loads(custom_runtime_settings_json)
-    except Exception as e:
-        logging.warning("Failed to parse CUSTOM_RUNTIME_SETTINGS: " + str(e))
+    except Exception as exc:
+        logging.warning("Failed to parse CUSTOM_RUNTIME_SETTINGS: %s", str(exc))
 
-    for k, v in os.environ.items():
-        if k.startswith("MXRUNTIME_"):
+    for key, value in os.environ.items():
+        if key.startswith("MXRUNTIME_"):
             custom_runtime_settings[
-                k.replace("MXRUNTIME_", "", 1).replace("_", ".")
-            ] = v
+                key.replace("MXRUNTIME_", "", 1).replace("_", ".")
+            ] = value
 
     return custom_runtime_settings
 
@@ -346,18 +335,17 @@ def _get_application_root_url(vcap_data):
             host = "localhost"
         if host != "localhost":
             prefix += "s"
-        return "{}://{}".format(prefix, host)
+        return f"{prefix}://{host}"
     except IndexError:
         logging.warning(
-            "No application routes are defined. Your application will not be accessible."
+            "No application routes are defined. "
+            "Your application will not be accessible."
         )
         return ""
 
 
 def _set_runtime_config(m2ee, metadata, vcap_data):
-    scheduled_event_execution, my_scheduled_events = _get_scheduled_events(
-        metadata
-    )
+    scheduled_event_execution, my_scheduled_events = _get_scheduled_events(metadata)
 
     app_config = {
         "ApplicationRootUrl": _get_application_root_url(vcap_data),
@@ -370,7 +358,9 @@ def _set_runtime_config(m2ee, metadata, vcap_data):
 
     if util.is_development_mode():
         logging.warning(
-            'Runtime is being started in Development mode. Set \'DEVELOPMENT_MODE to "false" (currently "true") to set it to Production mode.'
+            "Runtime is being started in Development mode. "
+            'Set \'DEVELOPMENT_MODE\' to "false" (currently "true") '
+            "to set it to Production mode."
         )
         app_config["DTAPMode"] = "D"
 
@@ -384,9 +374,7 @@ def _set_runtime_config(m2ee, metadata, vcap_data):
         app_config["com.mendix.core.SessionIdCookieName"] = "JSESSIONID"
 
     util.mkdir_p(os.path.join(os.getcwd(), "model", "resources"))
-    util.upsert_custom_runtime_settings(
-        m2ee, app_config, overwrite=True, append=True
-    )
+    util.upsert_custom_runtime_settings(m2ee, app_config, overwrite=True, append=True)
     util.upsert_custom_runtime_settings(
         m2ee,
         security.get_certificate_authorities(),
@@ -411,7 +399,7 @@ def _set_runtime_config(m2ee, metadata, vcap_data):
 
 
 def _set_application_name(m2ee, name):
-    logging.debug("Application name is %s" % name)
+    logging.debug("Application name is %s", name)
     util.upsert_m2ee_tools_setting(m2ee, "app_name", name, overwrite=True)
 
 
@@ -428,11 +416,13 @@ def _configure_debugger(m2ee):
     response.display_error()
     if not response.has_error():
         logging.info(
-            "Remote debugger enabled with value from DEBUGGER_PASSWORD environment variable"
+            "Remote debugger enabled with value "
+            "from DEBUGGER_PASSWORD environment variable"
         )
         logging.debug("The password to use is %s", debugger_password)
         logging.info(
-            "You can use the remote debugger option in Mendix Studio Pro to connect to the /debugger/ path (e.g. https://app.example.com/debugger/)"
+            "You can use the remote debugger option in Mendix Studio Pro to "
+            "connect to the /debugger/ path (e.g. https://app.example.com/debugger/)"
         )
 
 
@@ -461,9 +451,7 @@ def _stop(m2ee, timeout=10):
             os.waitpid(m2ee.runner.get_pid(), os.WNOHANG)
             m2ee.runner.cleanup_pid()
         except OSError as error:
-            logging.warning(
-                "Waiting for runtime process failed: {}".format(error)
-            )
+            logging.warning("Waiting for runtime process failed: %s", error)
             return False
     return True
 
@@ -486,9 +474,7 @@ def await_termination(m2ee, interval=1):
 def await_database_ready(m2ee, timeout=30):
     logging.info("Waiting for runtime database initialization to complete...")
     if not m2ee.client.ping(timeout):
-        raise Exception(
-            "Failed to receive successful ping from runtime Admin API"
-        )
+        raise Exception("Failed to receive successful ping from runtime Admin API")
     logging.info("Runtime database is now available")
 
 
@@ -496,7 +482,8 @@ def _start_app(m2ee):
     logging.info("The buildpack is starting the runtime...")
     if not m2ee.start_appcontainer():
         raise RuntimeError(
-            "Cannot start the Mendix runtime. Most likely, the runtime is already active or still active"
+            "Cannot start the Mendix runtime. "
+            "Most likely, the runtime is already active or still active"
         )
 
     @backoff.on_predicate(backoff.expo, max_time=240)
@@ -541,7 +528,8 @@ def _start_app(m2ee):
                         abort = True
                 else:
                     logging.info(
-                        "Waiting 10 seconds before primary instance synchronizes database..."
+                        "Waiting 10 seconds before primary instance "
+                        "synchronizes database..."
                     )
                     time.sleep(10)
             elif result == 4:
@@ -559,12 +547,15 @@ def _start_app(m2ee):
                     "Invalid state, please check your configuration for errors"
                 )
                 abort = True
-            elif result == 7 or result == 8 or result == 9:
-                logging.warning(
-                    "Invalid configuration, please check it for errors"
-                )
+            elif result in (7, 8, 9):
+                logging.warning("Invalid configuration, please check it for errors")
                 abort = True
             else:
+                logging.warning(
+                    "Unexpected result while starting app: %s."
+                    "Please check your configuration for errors",
+                    result,
+                )
                 abort = True
     if abort:
         raise RuntimeError("Application start failed")
@@ -611,13 +602,10 @@ def _pre_process_m2ee_yaml():
         [
             "sed",
             "-i",
-            "s|BUILD_PATH|%s|g; s|RUNTIME_PORT|%d|; s|ADMIN_PORT|%d|; s|PYTHONPID|%d|"
-            % (
-                os.getcwd(),
-                util.get_runtime_port(),
-                util.get_admin_port(),
-                os.getpid(),
-            ),
+            f"s|BUILD_PATH|{os.getcwd()}|g; "
+            f"s|RUNTIME_PORT|{util.get_runtime_port()}|; "
+            f"s|ADMIN_PORT|{util.get_admin_port()}|; "
+            f"s|PYTHONPID|{os.getpid()}|",
             ".local/m2ee.yaml",
         ]
     )

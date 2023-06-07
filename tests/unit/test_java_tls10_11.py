@@ -1,4 +1,5 @@
-import os, tempfile
+import os
+import tempfile
 
 from unittest import TestCase, mock
 
@@ -81,19 +82,15 @@ jdk.tls.disabledAlgorithms=SSLv3, RC4, DES, MD5withRSA
         for case in self.SECURITY_PROPERTIES_FILES_PATHS_CASES:
             if case[1] == "":
                 with self.assertRaises(ValueError):
-                    _get_security_properties_file(
-                        "", _get_major_version(case[0])
-                    )
+                    _get_security_properties_file("", _get_major_version(case[0]))
             else:
-                file = _get_security_properties_file(
-                    "", _get_major_version(case[0])
-                )
+                file = _get_security_properties_file("", _get_major_version(case[0]))
                 assert case[1] in str(file)
 
     MAJOR_VERSION_TEST_CASES = [
         ("8", 8),
         ("1.8.0", 8),
-        ("8u332", 8),
+        ("8u372", 8),
         ("11", 11),
         ("11.0.15", 11),
         ("7", ""),

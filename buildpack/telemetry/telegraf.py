@@ -1,8 +1,9 @@
 # This module adds the Telegraf metrics agent to an app container.
-# The agent collects StatsD events from Java agents injected into the runtime (if Datadog is not enabled).
+# The agent collects StatsD events from Java agents injected into the runtime
+# (if Datadog is not enabled).
 # Additionally, if enabled, PostgreSQL metrics are collected.
-# Metrics will be forwarded to either the host defined in APPMETRICS_TARGET environment,
-# or to other outputs such as Datadog.
+# Metrics will be forwarded to either the host defined in APPMETRICS_TARGET
+# environment, or to other outputs such as Datadog.
 
 import base64
 import json
@@ -10,30 +11,26 @@ import logging
 import os
 import shutil
 import subprocess
-from distutils.util import strtobool
 
 from buildpack import util
 from buildpack.core import runtime
 from buildpack.infrastructure import database
+from lib.m2ee.util import strtobool
 from jinja2 import Template
 
-from . import datadog, metrics, mx_java_agent, appdynamics, dynatrace
+from . import datadog, metrics, mx_java_agent, appdynamics, dynatrace, splunk
 
 NAMESPACE = "telegraf"
-DEPENDENCY = "%s.agent" % NAMESPACE
+DEPENDENCY = f"{NAMESPACE}.agent"
 INSTALL_PATH = os.path.join(os.path.abspath(".local"), NAMESPACE)
 
 
 def _get_executable_path(version):
-    return os.path.join(
-        INSTALL_PATH, "telegraf-{}".format(version), "usr", "bin", "telegraf"
-    )
+    return os.path.join(INSTALL_PATH, f"telegraf-{version}", "usr", "bin", "telegraf")
 
 
 def _get_config_file_dir(version):
-    return os.path.join(
-        INSTALL_PATH, "telegraf-{}".format(version), "etc", "telegraf"
-    )
+    return os.path.join(INSTALL_PATH, f"telegraf-{version}", "etc", "telegraf")
 
 
 def _get_config_file_path(version):
@@ -49,12 +46,13 @@ APPDYNAMICS_OUTPUT_SCRIPT_PATH = os.path.join(
     "appdynamics_telegraf_output.py",
 )
 
-POSTGRES_METRICS_INTERVAL = os.getenv("POSTGRES_METRICS_INTERVAL", default=10)
+POSTGRES_METRICS_INTERVAL = int(os.getenv("POSTGRES_METRICS_INTERVAL", default="10"))
 
 STATSD_PORT = 8125
 STATSD_PORT_ALT = 18125
 
-# APPMETRICS_TARGET is a variable which includes JSON (single or array) with the following values:
+# APPMETRICS_TARGET is a variable which includes JSON (single or array)
+# with the following values:
 # - url: complete url of the endpoint. Mandatory.
 # - username: basic auth username. Optional.
 # - password: basic auth password. Mandatory if username is specified.
@@ -99,7 +97,7 @@ def include_db_metrics():
 
 
 def _get_app_index():
-    return os.getenv("CF_INSTANCE_INDEX", 0)
+    return int(os.getenv("CF_INSTANCE_INDEX", "0"))
 
 
 def is_enabled(runtime_version):
@@ -135,17 +133,20 @@ def _get_http_outputs():
             http_configs = json.loads(metrics.get_appmetrics_target())
         except ValueError:
             logging.error(
-                "Invalid APPMETRICS_TARGET set. Please check if it contains valid JSON. Telegraf will not forward metrics to InfluxDB."
+                "Invalid APPMETRICS_TARGET set. "
+                "Please check if it contains valid JSON. "
+                "Telegraf will not forward metrics to InfluxDB."
             )
             return result
-        if type(http_configs) is not list:
+        if not isinstance(http_configs, list):
             http_configs = [http_configs]
 
     for http_config in http_configs:
         http_output = HttpOutput()
         if "url" not in http_config:
             logging.warning(
-                "APPMETRICS_TARGET.url value is not defined in %s. Not adding to Telegraf InfluxDB output configuration.",
+                "APPMETRICS_TARGET.url value is not defined in %s. "
+                "Not adding to Telegraf InfluxDB output configuration.",
                 json.dumps(http_config),
             )
         else:
@@ -156,11 +157,7 @@ def _get_http_outputs():
                 # http_output['username'] = username
                 # http_output['password'] = password
                 http_output.credentials = base64.b64encode(
-                    (
-                        "{}:{}".format(
-                            http_config["username"], http_config["password"]
-                        )
-                    ).encode()
+                    (f"{http_config['username']}:{http_config['password']}").encode()
                 ).decode("ascii")
 
             if "kpionly" in http_config and http_config["kpionly"] is not None:
@@ -172,9 +169,7 @@ def _get_http_outputs():
 
 
 def _get_db_config():
-    if (
-        include_db_metrics() or datadog.get_api_key()
-    ) and util.is_cluster_leader():
+    if (include_db_metrics() or datadog.get_api_key()) and util.is_cluster_leader():
         db_config = database.get_config()
         if db_config and db_config["DatabaseType"] == "PostgreSQL":
             return db_config
@@ -223,6 +218,26 @@ def _fix_metrics_registries_config(m2ee):
     )
 
 
+def _get_integration_usages():
+    """
+    Collects usage information of third-party integrations.
+    We emit these information via telegraf for internal monitoring
+    """
+    integration_usages = {}
+    checker_methods = {
+        "datadog": datadog.is_enabled,
+        "dynatrace": dynatrace.is_telegraf_enabled,
+        "appdynamics": appdynamics.appdynamics_used,
+        "splunk": splunk.is_splunk_enabled,
+    }
+
+    for integration, is_enabled in checker_methods.items():
+        if is_enabled():
+            integration_usages[integration] = 1
+
+    return integration_usages
+
+
 def update_config(m2ee, app_name):
     runtime_version = runtime.get_runtime_version()
     if not is_enabled(runtime_version) or not _is_installed():
@@ -235,9 +250,7 @@ def update_config(m2ee, app_name):
 
     version = util.get_dependency(DEPENDENCY)["version"]
 
-    template_path = os.path.join(
-        _get_config_file_dir(version), TEMPLATE_FILENAME
-    )
+    template_path = os.path.join(_get_config_file_dir(version), TEMPLATE_FILENAME)
 
     tags = util.get_tags()
     if datadog.is_enabled() and "service" not in tags:
@@ -258,7 +271,7 @@ def update_config(m2ee, app_name):
         database_diskstorage_metric_enabled=datadog.is_database_diskstorage_metric_enabled(),
         database_rate_count_metrics_enabled=datadog.is_database_rate_count_metrics_enabled(),
         datadog_api_key=datadog.get_api_key(),
-        datadog_api_url="{}series/".format(datadog.get_api_url()),
+        datadog_api_url=f"{datadog.get_api_url()}series/",
         http_outputs=_get_http_outputs(),
         trends_storage_url=metrics.get_micrometer_metrics_url(),
         micrometer_metrics=metrics.micrometer_metrics_enabled(runtime_version),
@@ -270,7 +283,11 @@ def update_config(m2ee, app_name):
         dynatrace_enabled=dynatrace.is_telegraf_enabled(),
         dynatrace_config=_get_dynatrace_config(app_name),
         telegraf_debug_enabled=os.getenv("TELEGRAF_DEBUG_ENABLED", "false"),
-        telegraf_fileout_enabled=strtobool(os.getenv("TELEGRAF_FILEOUT_ENABLED", "false"))
+        telegraf_fileout_enabled=strtobool(
+            os.getenv("TELEGRAF_FILEOUT_ENABLED", "false")
+        ),
+        runtime_version=runtime_version,
+        integration_usages=_get_integration_usages(),
     )
 
     logging.debug("Writing Telegraf configuration file...")
@@ -307,7 +324,7 @@ def stage(buildpack_path, build_path, cache_dir, runtime_version):
         os.path.join(
             build_path,
             NAMESPACE,
-            "telegraf-{}".format(dependency["version"]),
+            f"telegraf-{dependency['version']}",
             "etc",
             "telegraf",
         ),

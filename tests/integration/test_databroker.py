@@ -32,9 +32,7 @@ class CfLocalRunnerWithKafka(CfLocalRunnerWithPostgreSQL):
         self._database_postgres_image = POSTGRES_DB_DOCKER_IMAGE
         self._database_postgres_version = POSTGRES_DB_VERSION
 
-        self._kafka_container_name = "{}-{}".format(
-            self._app_name, KAFKA_CLUSTER_NAME
-        )
+        self._kafka_container_name = "{}-{}".format(self._app_name, KAFKA_CLUSTER_NAME)
 
     def _get_environment(self, env_vars):
         environment = super()._get_environment(env_vars)
@@ -86,9 +84,9 @@ class CfLocalRunnerWithKafka(CfLocalRunnerWithPostgreSQL):
 
         @backoff.on_predicate(backoff.expo, lambda x: x > 0, max_time=30)
         def _await_kafka_cluster():
-            return socket.socket(
-                socket.AF_INET, socket.SOCK_STREAM
-            ).connect_ex(("localhost", KAFKA_BROKER_PORT))
+            return socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect_ex(
+                ("localhost", KAFKA_BROKER_PORT)
+            )
 
         _await_kafka_cluster()
 
@@ -99,16 +97,12 @@ class CfLocalRunnerWithKafka(CfLocalRunnerWithPostgreSQL):
 
     def is_azkarra_running(self):
         topics = self.run_on_container(
-            "./opt/kafka_2.12-{}/bin/kafka-topics.sh --list --zookeeper localhost:{}".format(
-                KAFKA_CLUSTER_IMAGE_VERSION,
-                KAFKA_ZOOKEEPER_PORT,
-            ),
+            f"./opt/kafka_2.12-{KAFKA_CLUSTER_IMAGE_VERSION}/bin/kafka-topics.sh "
+            f"--list --zookeeper localhost:{KAFKA_ZOOKEEPER_PORT}",
             target_container=self._kafka_container_name,
         )
 
-        expect_public_topic_pattern = r".*?\.{}".format(
-            DATABROKER_TOPIC_FORMAT_VERSION
-        )
+        expect_public_topic_pattern = rf".*?\.{DATABROKER_TOPIC_FORMAT_VERSION}"
 
         return (
             len(
@@ -161,7 +155,4 @@ class TestCaseDataBroker(basetest.BaseTestWithPostgreSQL):
         # check streaming service
         output = self.get_recent_logs()
         assert output is not None
-        assert (
-            str(output).find("State transition from REBALANCING to RUNNING")
-            >= 0
-        )
+        assert str(output).find("State transition from REBALANCING to RUNNING") >= 0

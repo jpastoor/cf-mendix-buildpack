@@ -21,24 +21,16 @@ TEST_BROKER_URL = "localhost:9092"
 LOCAL_DATABROKER_FOLDER = "{}/.local/databroker".format(os.getcwd())
 KAFKA_CONNECT_DIR = "{}/kafka-connect".format(LOCAL_DATABROKER_FOLDER)
 KAFKA_CONNECT_CFG_NAME = "connect.properties"
-KAFKA_CONNECT_CFG_PATH = "{}/{}".format(
-    KAFKA_CONNECT_DIR, KAFKA_CONNECT_CFG_NAME
-)
-LOG4J_DEBEZIUM_CFG_PATH = "{}/{}".format(
-    KAFKA_CONNECT_DIR, "debezium-log4j.properties"
-)
+KAFKA_CONNECT_CFG_PATH = "{}/{}".format(KAFKA_CONNECT_DIR, KAFKA_CONNECT_CFG_NAME)
+LOG4J_DEBEZIUM_CFG_PATH = "{}/{}".format(KAFKA_CONNECT_DIR, "debezium-log4j.properties")
 
 STREAM_SIDECAR_DIR = "{}/producer-streams/stream-sidecar-{}".format(
     LOCAL_DATABROKER_FOLDER, streams.get_pdr_stream_version()
 )
 STREAM_TOPOLOGY_CFG_NAME = "topology.conf"
-STREAM_TOPOLOGY_CFG_PATH = "{}/{}".format(
-    STREAM_SIDECAR_DIR, STREAM_TOPOLOGY_CFG_NAME
-)
+STREAM_TOPOLOGY_CFG_PATH = "{}/{}".format(STREAM_SIDECAR_DIR, STREAM_TOPOLOGY_CFG_NAME)
 STREAM_AZKARRA_CFG_NAME = "azkarra.conf"
-STREAM_AZKARRA_CFG_PATH = "{}/{}".format(
-    STREAM_SIDECAR_DIR, STREAM_AZKARRA_CFG_NAME
-)
+STREAM_AZKARRA_CFG_PATH = "{}/{}".format(STREAM_SIDECAR_DIR, STREAM_AZKARRA_CFG_NAME)
 
 
 class TestDataBrokerConfigs(unittest.TestCase):
@@ -200,8 +192,10 @@ class TestDataBrokerConfigs(unittest.TestCase):
         # default
         assert streams.get_pdr_stream_version() == "0.23.0-9"
 
-    # There are two configs for streams, one is topology.conf another is azkarra.conf
-    # Make sure specifice fields would be replaced with correct value based on template file
+    # There are two configs for streams
+    # one is topology.conf another is azkarra.conf
+    # Make sure specifice fields would be replaced
+    # with correct value based on template file
     def test_stream_config(self):
 
         self._check_folder_exist(STREAM_SIDECAR_DIR)
@@ -218,12 +212,10 @@ class TestDataBrokerConfigs(unittest.TestCase):
         with open(STREAM_TOPOLOGY_CFG_PATH, "r") as f:
             actual_config = json.loads(f.read())
 
-            assert actual_config["topologies"][0][
-                "name"
-            ] == "{} topology".format(
-                expect_metadata_config["DataBrokerConfiguration"][
-                    "publishedServices"
-                ][0]["entities"][0]["publicEntityName"]
+            assert actual_config["topologies"][0]["name"] == "{} topology".format(
+                expect_metadata_config["DataBrokerConfiguration"]["publishedServices"][
+                    0
+                ]["entities"][0]["publicEntityName"]
             )
             assert (
                 actual_config["topologies"][0]["source"]
@@ -249,25 +241,19 @@ class TestDataBrokerConfigs(unittest.TestCase):
                 ][0]["entities"][0]["publicEntityName"]
             )
             assert (
-                actual_config["topologies"][0]["attributeMapping"][
-                    "INT_CompanyName"
-                ]
+                actual_config["topologies"][0]["attributeMapping"]["INT_CompanyName"]
                 == expect_metadata_config["DataBrokerConfiguration"][
                     "publishedServices"
                 ][0]["entities"][0]["attributeMapping"]["INT_CompanyName"]
             )
             assert (
-                actual_config["topologies"][0]["attributeMapping"][
-                    "INT_CompanyId"
-                ]
+                actual_config["topologies"][0]["attributeMapping"]["INT_CompanyId"]
                 == expect_metadata_config["DataBrokerConfiguration"][
                     "publishedServices"
                 ][0]["entities"][0]["attributeMapping"]["INT_CompanyId"]
             )
             assert (
-                actual_config["topologies"][0]["attributeMapping"][
-                    "INT_CompanyAddress"
-                ]
+                actual_config["topologies"][0]["attributeMapping"]["INT_CompanyAddress"]
                 == expect_metadata_config["DataBrokerConfiguration"][
                     "publishedServices"
                 ][0]["entities"][0]["attributeMapping"]["INT_CompanyAddress"]
@@ -286,25 +272,19 @@ class TestDataBrokerConfigs(unittest.TestCase):
                 ][0]["entities"][1]["publicEntityName"]
             )
             assert (
-                actual_config["topologies"][1]["attributeMapping"][
-                    "INT_ProjectName"
-                ]
+                actual_config["topologies"][1]["attributeMapping"]["INT_ProjectName"]
                 == expect_metadata_config["DataBrokerConfiguration"][
                     "publishedServices"
                 ][0]["entities"][1]["attributeMapping"]["INT_ProjectName"]
             )
             assert (
-                actual_config["topologies"][1]["attributeMapping"][
-                    "INT_ProjectId"
-                ]
+                actual_config["topologies"][1]["attributeMapping"]["INT_ProjectId"]
                 == expect_metadata_config["DataBrokerConfiguration"][
                     "publishedServices"
                 ][0]["entities"][1]["attributeMapping"]["INT_ProjectId"]
             )
             assert (
-                actual_config["topologies"][1]["attributeMapping"][
-                    "INT_ProjectAddress"
-                ]
+                actual_config["topologies"][1]["attributeMapping"]["INT_ProjectAddress"]
                 == expect_metadata_config["DataBrokerConfiguration"][
                     "publishedServices"
                 ][0]["entities"][1]["attributeMapping"]["INT_ProjectAddress"]
@@ -323,17 +303,13 @@ class TestDataBrokerConfigs(unittest.TestCase):
                 ][1]["entities"][0]["publicEntityName"]
             )
             assert (
-                actual_config["topologies"][2]["attributeMapping"][
-                    "INT_CompanyPubName"
-                ]
+                actual_config["topologies"][2]["attributeMapping"]["INT_CompanyPubName"]
                 == expect_metadata_config["DataBrokerConfiguration"][
                     "publishedServices"
                 ][1]["entities"][0]["attributeMapping"]["INT_CompanyPubName"]
             )
             assert (
-                actual_config["topologies"][2]["attributeMapping"][
-                    "INT_CompanyPubId"
-                ]
+                actual_config["topologies"][2]["attributeMapping"]["INT_CompanyPubId"]
                 == expect_metadata_config["DataBrokerConfiguration"][
                     "publishedServices"
                 ][1]["entities"][0]["attributeMapping"]["INT_CompanyPubId"]
@@ -344,9 +320,7 @@ class TestDataBrokerConfigs(unittest.TestCase):
                 ]
                 == expect_metadata_config["DataBrokerConfiguration"][
                     "publishedServices"
-                ][1]["entities"][0]["attributeMapping"][
-                    "INT_CompanyPubAddress"
-                ]
+                ][1]["entities"][0]["attributeMapping"]["INT_CompanyPubAddress"]
             )
 
             assert (
@@ -362,17 +336,13 @@ class TestDataBrokerConfigs(unittest.TestCase):
                 ][1]["entities"][1]["publicEntityName"]
             )
             assert (
-                actual_config["topologies"][3]["attributeMapping"][
-                    "INT_MemberPubName"
-                ]
+                actual_config["topologies"][3]["attributeMapping"]["INT_MemberPubName"]
                 == expect_metadata_config["DataBrokerConfiguration"][
                     "publishedServices"
                 ][1]["entities"][1]["attributeMapping"]["INT_MemberPubName"]
             )
             assert (
-                actual_config["topologies"][3]["attributeMapping"][
-                    "INT_MemberPubId"
-                ]
+                actual_config["topologies"][3]["attributeMapping"]["INT_MemberPubId"]
                 == expect_metadata_config["DataBrokerConfiguration"][
                     "publishedServices"
                 ][1]["entities"][1]["attributeMapping"]["INT_MemberPubId"]

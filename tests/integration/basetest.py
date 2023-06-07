@@ -2,10 +2,9 @@ import os
 import re
 import unittest
 import uuid
-from distutils.util import strtobool
 
 from buildpack import util
-
+from lib.m2ee.util import strtobool
 from .runner import CfLocalRunnerWithLocalDB, CfLocalRunnerWithPostgreSQL
 
 
@@ -49,15 +48,11 @@ class BaseTest(unittest.TestCase):
 
         return self._runner.stage(
             package=package_url,
-            buildpack=os.path.join(
-                os.getcwd(), "dist", "cf-mendix-buildpack.zip"
-            ),
+            buildpack=os.path.join(os.getcwd(), "dist", "cf-mendix-buildpack.zip"),
             env_vars=env_vars,
             use_snapshot=use_snapshot,
             password=os.environ.get(self.ENV_PREFIX + "MX_PASSWORD"),
-            debug=bool(
-                strtobool(os.environ.get(self.ENV_PREFIX + "DEBUG", "true"))
-            ),
+            debug=bool(strtobool(os.environ.get(self.ENV_PREFIX + "DEBUG", "true"))),
             host=os.environ.get(self.ENV_PREFIX + "HOST"),
             disk=os.environ.get(self.ENV_PREFIX + "DISK"),
             memory=os.environ.get(self.ENV_PREFIX + "MEMORY"),
@@ -111,9 +106,7 @@ class BaseTest(unittest.TestCase):
 
     def assert_patterns_not_in_recent_logs(self, patterns):
 
-        _, found_patterns, output = self.check_patterns_in_recent_logs(
-            patterns
-        )
+        _, found_patterns, output = self.check_patterns_in_recent_logs(patterns)
 
         if found_patterns:
             self.fail(
@@ -162,9 +155,7 @@ class BaseTest(unittest.TestCase):
         self.assert_string_in_recent_logs("Mendix Runtime is now shut down")
         if exitcode == 0:
             # sys.exit(1) only occurs before the await termination loop
-            self.assert_string_in_recent_logs(
-                "Runtime process has been terminated"
-            )
+            self.assert_string_in_recent_logs("Runtime process has been terminated")
         self.assert_string_in_recent_logs("Terminating process group")
 
     def query_mxadmin(self, *args, **kwargs):

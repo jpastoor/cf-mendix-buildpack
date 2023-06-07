@@ -1,5 +1,4 @@
 import crypt
-import distutils
 import json
 import logging
 import os
@@ -12,16 +11,17 @@ from buildpack import util
 from buildpack.core import runtime, security
 from jinja2 import Template
 from lib.m2ee.version import MXVersion
+from lib.m2ee.util import strtobool
 
 ALLOWED_HEADERS = {
-    "X-Frame-Options": r"(?i)(^allow-from https?://([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*(:\d+)?$|^deny$|^sameorigin$)",  # noqa: E501
-    "Referrer-Policy": r"(?i)(^no-referrer$|^no-referrer-when-downgrade$|^origin|origin-when-cross-origin$|^same-origin|strict-origin$|^strict-origin-when-cross-origin$|^unsafe-url$)",  # noqa: E501
-    "Access-Control-Allow-Origin": r"(?i)(^\*$|^null$|^https?://([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*(:\d+)?$)",  # noqa: E501
+    "X-Frame-Options": r"(?i)(^allow-from https?://([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*(:\d+)?$|^deny$|^sameorigin$)",  # noqa: line-too-long
+    "Referrer-Policy": r"(?i)(^no-referrer$|^no-referrer-when-downgrade$|^origin|origin-when-cross-origin$|^same-origin|strict-origin$|^strict-origin-when-cross-origin$|^unsafe-url$)",  # noqa: line-too-long
+    "Access-Control-Allow-Origin": r"(?i)(^\*$|^null$|^https?://([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*(:\d+)?$)",  # noqa: line-too-long
     "X-Content-Type-Options": r"(?i)(^nosniff$)",
     "Content-Security-Policy": r"[a-zA-Z0-9:;/''\"\*_\- \.\n?=%&+]+",
-    "Strict-Transport-Security": r"(?i)(^max-age=[0-9]*$|^max-age=[0-9]*; includeSubDomains$|^max-age=[0-9]*; preload$)",  # noqa: E501
-    "X-Permitted-Cross-Domain-Policies": r"(?i)(^all$|^none$|^master-only$|^by-content-type$|^by-ftp-filename$)",  # noqa: E501
-    "X-XSS-Protection": r"(?i)(^0$|^1$|^1; mode=block$|^1; report=https?://([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*(:\d+)?$)",  # noqa: E501
+    "Strict-Transport-Security": r"(?i)(^max-age=[0-9]*$|^max-age=[0-9]*; includeSubDomains$|^max-age=[0-9]*; preload$)",  # noqa: line-too-long
+    "X-Permitted-Cross-Domain-Policies": r"(?i)(^all$|^none$|^master-only$|^by-content-type$|^by-ftp-filename$)",  # noqa: line-too-long
+    "X-XSS-Protection": r"(?i)(^0$|^1$|^1; mode=block$|^1; report=https?://([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*(:\d+)?$)",  # noqa: line-too-long
 }
 
 CONFIG_FILE = "nginx/conf/nginx.conf"
@@ -42,21 +42,20 @@ CLIENT_CERT_CHECK_INTERNAL_PATH_PREFIX = "/client-cert-check-internal"
 RESERVED_PATH_PREFIXES = [MXADMIN_PATH, CLIENT_CERT_CHECK_INTERNAL_PATH_PREFIX]
 
 # Fix for Chrome SameSite enforcement (from Chrome 80 onwards)
-# Runtime will set this cookie in runtime versions >= SAMESITE_COOKIE_WORKAROUND_LESS_MX_VERSION
+# Runtime will set this cookie
+# in runtime versions >= SAMESITE_COOKIE_WORKAROUND_LESS_MX_VERSION
 def _is_samesite_cookie_workaround_enabled(mx_version):
     SAMESITE_COOKIE_WORKAROUND_ENV_KEY = "SAMESITE_COOKIE_PRE_MX812"
     SAMESITE_COOKIE_WORKAROUND_DEFAULT = False
     SAMESITE_COOKIE_WORKAROUND_LESS_MX_VERSION = "8.12"
 
     try:
-        return distutils.util.strtobool(
+        return strtobool(
             os.environ.get(
                 SAMESITE_COOKIE_WORKAROUND_ENV_KEY,
                 str(SAMESITE_COOKIE_WORKAROUND_DEFAULT),
             )
-        ) and mx_version < MXVersion(
-            SAMESITE_COOKIE_WORKAROUND_LESS_MX_VERSION
-        )
+        ) and mx_version < MXVersion(SAMESITE_COOKIE_WORKAROUND_LESS_MX_VERSION)
     except (ValueError, AttributeError):
         logging.warning(
             "Invalid value for [%s], disabling SameSite cookie workaround",
@@ -66,8 +65,7 @@ def _is_samesite_cookie_workaround_enabled(mx_version):
 
 
 def _is_custom_nginx():
-    if "NGINX_CUSTOM_BIN_PATH" in os.environ:
-        return True
+    return bool("NGINX_CUSTOM_BIN_PATH" in os.environ)
 
 
 def stage(buildpack_path, build_path, cache_path):
@@ -86,21 +84,19 @@ def stage(buildpack_path, build_path, cache_path):
             cache_dir=cache_path,
         )
     else:
-        logging.debug(
-            "Custom nginx path provided, nginx will not be downloaded"
-        )
+        logging.debug("Custom nginx path provided, nginx will not be downloaded")
 
 
 def update_config():
-    samesite_cookie_workaround_enabled = (
-        _is_samesite_cookie_workaround_enabled(runtime.get_runtime_version())
+    samesite_cookie_workaround_enabled = _is_samesite_cookie_workaround_enabled(
+        runtime.get_runtime_version()
     )
     if samesite_cookie_workaround_enabled:
         logging.info("SameSite cookie workaround is enabled")
 
     # Populating nginx config template
     output_path = os.path.abspath(CONFIG_FILE)
-    template_path = os.path.abspath("{}.j2".format(CONFIG_FILE))
+    template_path = os.path.abspath(f"{CONFIG_FILE}.j2")
 
     with open(template_path, "r") as file_:
         template = Template(file_.read(), trim_blocks=True, lstrip_blocks=True)
@@ -108,6 +104,7 @@ def update_config():
         samesite_cookie_workaround_enabled=samesite_cookie_workaround_enabled,
         locations=_get_locations(),
         default_headers=_get_http_headers(),
+        nginx_keepalive_timeout=_get_nginx_keepalive_timeout(),
         nginx_port=str(util.get_nginx_port()),
         runtime_port=str(util.get_runtime_port()),
         admin_port=str(util.get_admin_port()),
@@ -123,7 +120,7 @@ def update_config():
 
     # Populating proxy params template
     output_path = os.path.abspath(PROXY_FILE)
-    template_path = os.path.abspath("{}.j2".format(PROXY_FILE))
+    template_path = os.path.abspath(f"{PROXY_FILE}.j2")
 
     with open(template_path, "r") as file_:
         template = Template(file_.read(), trim_blocks=True, lstrip_blocks=True)
@@ -140,6 +137,10 @@ def update_config():
     _generate_password_file({"MxAdmin": security.get_m2ee_password()})
 
 
+def _get_nginx_keepalive_timeout():
+    return os.environ.get("NGINX_KEEPALIVE_TIMEOUT", "30")
+
+
 def _get_proxy_buffer_size():
     return os.environ.get("NGINX_PROXY_BUFFER_SIZE", None)
 
@@ -151,10 +152,14 @@ def _get_proxy_buffers():
 # Access restriction configuration
 # Example:
 #   {
-#       "/": {'ipfilter': ['10.0.0.0/8'], 'client_cert': true, 'satisfy': 'any'},
-#       "/ws/MyWebService/": {'ipfilter': ['10.0.0.0/8'], 'client_cert': true, 'satisfy': 'all'},
-#       "/CustomRequestHandler/": {'ipfilter': ['10.0.0.0/8']},
-#       "/CustomRequestHandler2/": {'basic_auth': {'user1': 'password', 'user2': 'password2'}},
+#       "/":
+#           {'ipfilter': ['10.0.0.0/8'], 'client_cert': true, 'satisfy': 'any'},
+#       "/ws/MyWebService/":
+#           {'ipfilter': ['10.0.0.0/8'], 'client_cert': true, 'satisfy': 'all'},
+#       "/CustomRequestHandler/":
+#           {'ipfilter': ['10.0.0.0/8']},
+#       "/CustomRequestHandler2/":
+#           {'basic_auth': {'user1': 'password', 'user2': 'password2'}},
 #   }
 def _get_access_restrictions():
     return json.loads(os.environ.get("ACCESS_RESTRICTIONS", "{}"))
@@ -181,7 +186,7 @@ def _get_http_headers():
 
     try:
         headers_from_json.update(json.loads(headers_json))
-    except Exception as _:
+    except Exception:
         logging.error(
             "Failed to parse HTTP_RESPONSE_HEADERS due to invalid JSON string: '%s'",
             headers_json,
@@ -190,31 +195,23 @@ def _get_http_headers():
 
     result = []
     for header_key, header_value in headers_from_json.items():
-        regEx = ALLOWED_HEADERS[header_key]
-        if regEx and re.match(regEx, header_value):
-            escaped_value = header_value.replace('"', '\\"').replace(
-                "'", "\\'"
-            )
+        regex = ALLOWED_HEADERS[header_key]
+        if regex and re.match(regex, header_value):
+            escaped_value = header_value.replace('"', '\\"').replace("'", "\\'")
             result.append((header_key, escaped_value))
             logging.debug(
-                "Added header {} '{}' to nginx config".format(
-                    header_key, header_value
-                )
+                "Added header %s '%s' to nginx config", header_key, header_value
             )
         else:
             logging.warning(
-                "Skipping {} config, value '{}' is not valid".format(
-                    header_key, header_value
-                )
+                "Skipping %s config, value '%s' is not valid", header_key, header_value
             )
 
     return result
 
 
 def _get_nginx_bin_path():
-    nginx_bin_path = os.environ.get(
-        "NGINX_CUSTOM_BIN_PATH", "nginx/sbin/nginx"
-    )
+    nginx_bin_path = os.environ.get("NGINX_CUSTOM_BIN_PATH", "nginx/sbin/nginx")
     return nginx_bin_path
 
 
@@ -232,19 +229,14 @@ def run():
 
 
 def _generate_password_file(users_passwords, file_name_suffix=""):
-    with open("nginx/.htpasswd" + file_name_suffix, "w") as fh:
+    with open("nginx/.htpasswd" + file_name_suffix, "w") as file_handler:
         for user, password in users_passwords.items():
             if not password:
-                fh.write("\n")
+                file_handler.write("\n")
             else:
-                fh.write(
-                    "%s:%s\n"
-                    % (
-                        user,
-                        crypt.crypt(
-                            password, crypt.mksalt(crypt.METHOD_SHA512)
-                        ),
-                    )
+                file_handler.write(
+                    f"{user}:"
+                    f"{crypt.crypt(password, crypt.mksalt(crypt.METHOD_SHA512))}\n"
                 )
 
 
@@ -274,7 +266,8 @@ def _get_slashed_path(path):
 
 
 # Gets the location configuration for the most specific path that matches the path
-# This is required to ensure that "nested" locations have the same configuration as their parent
+# This is required to ensure that "nested" locations
+# have the same configuration as their parent
 def _get_most_specific_location_config(path, locations):
     sorted_paths = sorted(locations.keys())
     sorted_paths.reverse()
@@ -310,9 +303,7 @@ def _get_locations(
     request_handlers = runtime.get_metadata_value("RequestHandlers")
     if request_handlers is not None:
         paths = [handler["Name"] for handler in request_handlers]
-        dynamic_handler_paths = list(
-            set(paths) - set(DEFAULT_REQUEST_HANDLER_PATHS)
-        )
+        dynamic_handler_paths = list(set(paths) - set(DEFAULT_REQUEST_HANDLER_PATHS))
 
     # Add dynamic request handler locations
     for dynamic_handler_path in dynamic_handler_paths:
@@ -327,11 +318,9 @@ def _get_locations(
         for rest_handler_path in rest_handler_paths:
             locations[
                 _get_slashed_path(rest_handler_path)
-            ] = _get_most_specific_location_config(
-                rest_handler_path, locations
-            )
-    except Exception as e:
-        logging.error("Cannot get REST handlers from model: %s" % e)
+            ] = _get_most_specific_location_config(rest_handler_path, locations)
+    except Exception as exc:
+        logging.error("Cannot get REST handlers from model: %s", exc)
 
     # Convert dictionary into list of locations
     index = 0
@@ -344,9 +333,7 @@ def _get_locations(
 
         # Reserved path prefixes are restricted
         if any(path.startswith(prefix) for prefix in RESERVED_PATH_PREFIXES):
-            raise Exception(
-                "Can not override location on reserved path [%s]" % path
-            )
+            raise Exception(f"Can not override location on reserved path [{path}]")
 
         # If body is set and is only element, assume custom location
         if len(config) == 1 and "body" in config:
@@ -367,21 +354,21 @@ def _get_locations(
                 location.proxy_intercept_errors_enabled = True
 
             # Explicitly disable error interception for dynamic request handlers
-            # This is not strictly required (default is disabled), but it might be in the future
+            # This is not strictly required (default is disabled)
+            # but it might be in the future
             if _is_subpath_of(path, dynamic_handler_paths) or _is_subpath_of(
                 path, rest_handler_paths
             ):
                 location.proxy_intercept_errors_enabled = False
 
             # Add the  access restrictions configuration
-            # "Satisfy" specifies if restrictions should be evaluated as "AND" (all) or "OR" (any)
+            # "Satisfy" specifies if restrictions should be
+            # evaluated as "AND" (all) or "OR" (any)
             if "satisfy" in config:
                 if config["satisfy"] in ["any", "all"]:
                     location.satisfy = config["satisfy"]
                 else:
-                    raise Exception(
-                        "Invalid satisfy value: %s" % config["satisfy"]
-                    )
+                    raise Exception(f"Invalid satisfy value: {config['satisfy']}")
 
             # Add IP filter configuration
             if "ipfilter" in config:
@@ -398,28 +385,30 @@ def _get_locations(
             if config.get("client-cert") or config.get("client_cert"):
                 location.client_cert_enabled = True
 
-            # Add "Issuer DN" check for the client certificate chain. The required header is passed on from an upstream proxy,
+            # Add "Issuer DN" check for the client certificate chain.
+            # The required header is passed on from an upstream proxy,
             # which in the case of Mendix Cloud is the Front-Facing Fleet
-            # This scenario isn't covered by integration tests. Please test manually if Nginx is properly matching the
-            # SSL-Client-I-DN HTTP header with the configuration in the ACCESS_RESTRICTIONS environment variable.
+            # This scenario isn't covered by integration tests.
+            # Please test manually if Nginx is properly matching the
+            # SSL-Client-I-DN HTTP header with the configuration
+            # in the ACCESS_RESTRICTIONS environment variable.
             if "issuer_dn" in config:
                 location.issuer_dn_regex = ""
                 location.issuer_dn = ""
                 for i in config["issuer_dn"]:
                     # Workaround for missing identifier strings from Java
-                    # This should be fixed in upstream code by using different certificate libraries
-                    issuer = i.replace(
-                        "OID.2.5.4.97", "organizationIdentifier"
-                    )
+                    # This should be fixed in upstream code by using
+                    # different certificate libraries
+                    issuer = i.replace("OID.2.5.4.97", "organizationIdentifier")
 
-                    location.issuer_dn += "{}|".format(issuer)
+                    location.issuer_dn += f"{issuer}|"
 
                     # Escape special characters
                     issuer = issuer.replace(" ", "\\040")
                     issuer = issuer.replace(".", "\\.")
                     issuer = issuer.replace("'", "\\'")
 
-                    location.issuer_dn_regex += "{}|".format(issuer)
+                    location.issuer_dn_regex += f"{issuer}|"
                 location.issuer_dn = location.issuer_dn[:-1]
                 location.issuer_dn_regex = location.issuer_dn_regex[:-1]
 

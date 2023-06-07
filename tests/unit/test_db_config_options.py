@@ -30,39 +30,32 @@ class TestDatabaseConfigOptions(TestCase):
         os.environ,
         {
             "MXRUNTIME_DatabaseType": "PostgreSQL",
-            "MXRUNTIME_DatabaseJdbcUrl": "jdbc:postgresql://username:password@rdsbroker-testfree-nonprod-1-eu-west-1.asdbjasdg.eu-west-1.rds.amazonaws.com:5432/testdatabase",
+            "MXRUNTIME_DatabaseJdbcUrl": "jdbc:postgresql://username:password@rdsbroker-testfree-nonprod-1-eu-west-1.asdbjasdg.eu-west-1.rds.amazonaws.com:5432/testdatabase",  # noqa: line-too-long
         },
         clear=True,
     )
     def test_mx_runtime_db_config(self):
-        # Test if MXRUNTIME variables are set up if no database configuration is returned
+        # Test if MXRUNTIME variables are set up
+        # if no database configuration is returned
         # based on DATABASE_URL or VCAP_SERVICES
         config = get_config()
         assert not config
 
-    DATABASE_URL_ENV = {
-        "DATABASE_URL": "postgres://user:secret@host:5432/database"
-    }
+    DATABASE_URL_ENV = {"DATABASE_URL": "postgres://user:secret@host:5432/database"}
     VALID_PARAMS_ENV = {
         "DATABASE_CONNECTION_PARAMS": json.dumps(
             {"tcpKeepAlive": "false", "connectionTimeout": 30}
         )
     }
 
-    @mock.patch.dict(
-        os.environ, {**DATABASE_URL_ENV, **VALID_PARAMS_ENV}, clear=True
-    )
+    @mock.patch.dict(os.environ, {**DATABASE_URL_ENV, **VALID_PARAMS_ENV}, clear=True)
     def test_valid_jdbc_parameters(self):
         config = get_config()
         assert "tcpKeepAlive=false" in config["DatabaseJdbcUrl"]
 
-    INVALID_PARAMS_ENV = {
-        "DATABASE_CONNECTION_PARAMS": '{"tcpKeepAlive": "false"'
-    }
+    INVALID_PARAMS_ENV = {"DATABASE_CONNECTION_PARAMS": '{"tcpKeepAlive": "false"'}
 
-    @mock.patch.dict(
-        os.environ, {**DATABASE_URL_ENV, **INVALID_PARAMS_ENV}, clear=True
-    )
+    @mock.patch.dict(os.environ, {**DATABASE_URL_ENV, **INVALID_PARAMS_ENV}, clear=True)
     def test_invalid_jdbc_parameters(self):
         config = get_config()
         assert "tcpKeepAlive=false" not in config["DatabaseJdbcUrl"]
@@ -84,9 +77,7 @@ class TestDatabaseConfigOptions(TestCase):
         parts = urlparse("postgres://user:secret@host/database")
         parts = parts._replace(query=urlencode(native_params))
         native_url = urlunparse(parts)
-        with mock.patch.dict(
-            os.environ, {"DATABASE_URL": native_url}, clear=True
-        ):
+        with mock.patch.dict(os.environ, {"DATABASE_URL": native_url}, clear=True):
             config = get_config()
             assert config
             assert config["DatabaseType"] == "PostgreSQL"
@@ -180,9 +171,9 @@ class CertGen:
         ).decode("iso-8859-1")
 
     def _dump_cert(self, cert: Certificate, out_name):
-        self.cert_map[out_name] = cert.public_bytes(
-            serialization.Encoding.PEM
-        ).decode("iso-8859-1")
+        self.cert_map[out_name] = cert.public_bytes(serialization.Encoding.PEM).decode(
+            "iso-8859-1"
+        )
 
     def init_root_cert(self):
         self.root_key = self._newkey()

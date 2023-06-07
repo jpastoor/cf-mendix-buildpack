@@ -21,9 +21,7 @@ from buildpack.telemetry import (
 )
 
 BUILDPACK_DIR = os.path.abspath(
-    os.path.dirname(
-        os.path.dirname(os.path.join(os.path.dirname(__file__), ".."))
-    )
+    os.path.dirname(os.path.dirname(os.path.join(os.path.dirname(__file__), "..")))
 )
 BUILD_DIR = os.path.abspath(sys.argv[1])
 CACHE_DIR = os.path.abspath(os.path.join(sys.argv[2], "bust"))
@@ -37,7 +35,7 @@ else:
     PROFILE_DIR = os.path.abspath(os.path.join(BUILD_DIR, ".profile.d"))
 
 SUPPORTED_STACKS = [
-    "cflinuxfs3",
+    "cflinuxfs4",
     None,
 ]  # None is allowed, but not supported
 
@@ -69,27 +67,25 @@ def preflight_check(version):
         stack,
     )
 
-    if not stack in SUPPORTED_STACKS:
-        raise NotImplementedError(
-            "Stack [{}] is not supported by this buildpack".format(stack)
-        )
+    if stack not in SUPPORTED_STACKS:
+        raise NotImplementedError(f"Stack [{stack}] is not supported by this buildpack")
     if not runtime.is_version_implemented(version):
         raise NotImplementedError(
-            "Mendix [{}] is not supported by this buildpack".format(
-                version.major
-            )
+            "Mendix [{version.major}] is not supported by this buildpack"
         )
     if not runtime.is_version_supported(version):
         logging.warning(
-            "Mendix [{}] is end-of-support. Please use a supported Mendix version (https://docs.mendix.com/releasenotes/studio-pro/lts-mts).".format(
-                version.major
-            )
+            "Mendix [%s] is end-of-support. Please use a supported Mendix version "
+            "(https://docs.mendix.com/releasenotes/studio-pro/lts-mts).",
+            version.major,
         )
     elif not runtime.is_version_maintained(version):
         logging.info(
-            "Mendix [{}.{}] is not maintained. Please use a medium- or long-term supported Mendix version to easily receive fixes (https://docs.mendix.com/releasenotes/studio-pro/lts-mts).".format(
-                version.major, version.minor
-            )
+            "Mendix [%d.%d] is not maintained. Please use a medium- or long-term "
+            "supported Mendix version to easily receive fixes "
+            "(https://docs.mendix.com/releasenotes/studio-pro/lts-mts).",
+            version.major,
+            version.minor,
         )
 
     logging.info("Preflight check completed")
@@ -111,9 +107,7 @@ def copy_buildpack_resources():
         os.path.join(BUILDPACK_DIR, "buildpack"),
         os.path.join(BUILD_DIR, "buildpack"),
     )
-    shutil.copytree(
-        os.path.join(BUILDPACK_DIR, "lib"), os.path.join(BUILD_DIR, "lib")
-    )
+    shutil.copytree(os.path.join(BUILDPACK_DIR, "lib"), os.path.join(BUILD_DIR, "lib"))
     commit_file_path = os.path.join(BUILDPACK_DIR, ".commit")
     if os.path.isfile(commit_file_path):
         shutil.copy(
@@ -142,8 +136,7 @@ def get_mpr_file():
 def is_source_push():
     if get_mpr_file() is not None:
         return True
-    else:
-        return False
+    return False
 
 
 def cleanup_dependency_cache(cached_dir, dependency_list):
@@ -151,16 +144,12 @@ def cleanup_dependency_cache(cached_dir, dependency_list):
     for root, dirs, files in os.walk(cached_dir):
         for file in files:
             file_full_path = os.path.join(root, file)
-            logging.debug(
-                "dependency in cache folder: [{}]".format(file_full_path)
-            )
+            logging.debug("dependency in cache folder: [%s]", file_full_path)
             if file_full_path not in dependency_list:
                 # delete from cache
                 os.remove(file_full_path)
                 logging.debug(
-                    "deleted unused dependency [{}] from [{}]...".format(
-                        file_full_path, root
-                    )
+                    "deleted unused dependency [%s] from [%s]...", file_full_path, root
                 )
 
 
@@ -174,13 +163,13 @@ if __name__ == "__main__":
     )
 
     runtime_version = runtime.get_runtime_version(BUILD_DIR)
-    java_version = java.get_java_major_version(runtime_version)
+    JAVA_VERSION = java.get_java_major_version(runtime_version)
 
     try:
         preflight_check(runtime_version)
     except (ValueError, NotImplementedError) as error:
         logging.error(error)
-        exit(1)
+        sys.exit(1)
 
     copy_dependency_file()
 
@@ -192,11 +181,11 @@ if __name__ == "__main__":
                 CACHE_DIR,
                 DOT_LOCAL_LOCATION,
                 runtime_version,
-                java_version,
+                JAVA_VERSION,
             )
         except RuntimeError as error:
             logging.error(error)
-            exit(1)
+            sys.exit(1)
 
     set_up_directory_structure()
     copy_buildpack_resources()
@@ -206,19 +195,15 @@ if __name__ == "__main__":
         BUILDPACK_DIR,
         CACHE_DIR,
         DOT_LOCAL_LOCATION,
-        java_version,
+        JAVA_VERSION,
     )
     appdynamics.stage(BUILDPACK_DIR, DOT_LOCAL_LOCATION, CACHE_DIR)
     dynatrace.stage(BUILDPACK_DIR, DOT_LOCAL_LOCATION, CACHE_DIR)
     splunk.stage()
     fluentbit.stage(BUILDPACK_DIR, DOT_LOCAL_LOCATION, CACHE_DIR)
     newrelic.stage(BUILDPACK_DIR, DOT_LOCAL_LOCATION, CACHE_DIR)
-    mx_java_agent.stage(
-        BUILDPACK_DIR, DOT_LOCAL_LOCATION, CACHE_DIR, runtime_version
-    )
-    telegraf.stage(
-        BUILDPACK_DIR, DOT_LOCAL_LOCATION, CACHE_DIR, runtime_version
-    )
+    mx_java_agent.stage(BUILDPACK_DIR, DOT_LOCAL_LOCATION, CACHE_DIR, runtime_version)
+    telegraf.stage(BUILDPACK_DIR, DOT_LOCAL_LOCATION, CACHE_DIR, runtime_version)
     datadog.stage(BUILDPACK_DIR, DOT_LOCAL_LOCATION, CACHE_DIR)
     metering.stage(BUILDPACK_DIR, BUILD_DIR, CACHE_DIR)
     database.stage(BUILDPACK_DIR, BUILD_DIR)

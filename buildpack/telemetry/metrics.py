@@ -7,7 +7,6 @@ import socket
 import threading
 import time
 from abc import ABCMeta, abstractmethod
-from distutils.util import strtobool
 from timeit import default_timer as timer
 
 import psycopg2
@@ -17,6 +16,7 @@ from buildpack.core import runtime
 from buildpack.infrastructure import database
 from lib.m2ee import munin
 from lib.m2ee.version import MXVersion
+from lib.m2ee.util import strtobool
 
 from . import datadog, appdynamics, dynatrace
 
@@ -45,12 +45,12 @@ INFLUX_REGISTRY = {
             "values": ["mx.runtime.user.login"],
         },
         # Filter out irrelevant metrics to reduce
-        # the payload size passed to TSS
+        # the payload size passed to TSS/TFR
         # https://docs.mendix.com/refguide/metrics#filters
         {
             "type": "nameStartsWith",
             "result": "deny",
-            "values": ["commons.pool"],
+            "values": ["commons.pool", "jvm.buffer"],
         },
     ],
 }
@@ -122,7 +122,7 @@ def run(m2ee):
             thread = FreeAppsMetricsEmitterThread(int(metrics_interval), m2ee)
         else:
             thread = PaidAppsMetricsEmitterThread(int(metrics_interval), m2ee)
-        thread.setDaemon(True)
+        thread.daemon = True
         thread.start()
     else:
         logging.info("MENDIX-INTERNAL: Metrics are disabled.")
@@ -140,9 +140,7 @@ def get_micrometer_metrics_url():
     micrometer metrics only. Runtime version 9.7 and above is required.
 
     """
-    use_trends_forwarder = strtobool(
-        os.getenv("USE_TRENDS_FORWARDER", default="true")
-    )
+    use_trends_forwarder = strtobool(os.getenv("USE_TRENDS_FORWARDER", default="true"))
 
     trends_forwarder_url = os.getenv("TRENDS_FORWARDER_URL", default="")
 
@@ -161,9 +159,7 @@ def _micrometer_runtime_requirement(runtime_version):
     # TODO: DISABLE_MICROMETER_METRICS is a temporary flag to disable metrics
     # collection via micrometer till we are ready to do the switchover
     # from admin port metrics to micrometer based metrics
-    disable_micrometer = strtobool(
-        os.getenv("DISABLE_MICROMETER_METRICS", "false")
-    )
+    disable_micrometer = strtobool(os.getenv("DISABLE_MICROMETER_METRICS", "false"))
 
     runtime_version_supported = runtime_version >= MXVERSION_MICROMETER
 
@@ -175,9 +171,9 @@ def _micrometer_runtime_requirement(runtime_version):
 
 def micrometer_metrics_enabled(runtime_version):
     """Check for metrics from micrometer."""
-    return bool(
-        get_micrometer_metrics_url()
-    ) and _micrometer_runtime_requirement(runtime_version)
+    return bool(get_micrometer_metrics_url()) and _micrometer_runtime_requirement(
+        runtime_version
+    )
 
 
 def configure_metrics_registry(m2ee):
@@ -188,9 +184,7 @@ def configure_metrics_registry(m2ee):
     if not micrometer_metrics_enabled(runtime.get_runtime_version()):
         return []
 
-    logging.info(
-        "Configuring runtime to push metrics to influx via micrometer"
-    )
+    logging.info("Configuring runtime to push metrics to influx via micrometer")
     if util.is_free_app():
         return FREEAPPS_METRICS_REGISTRY
 
@@ -213,7 +207,7 @@ def bypass_loggregator():
     # Necessary since we store these in cloud portal as strings.
     try:
         bypass = strtobool(env_var)
-    except ValueError as _:
+    except ValueError:
         logging.warning(
             "Bypass loggregator has a nonsensical value: %s. "
             "Falling back to old loggregator-based metric reporting.",
@@ -224,12 +218,11 @@ def bypass_loggregator():
     if bypass:
         if os.getenv("TRENDS_STORAGE_URL"):
             return True
-        else:
-            logging.warning(
-                "BYPASS_LOGGREGATOR is set to true, but no metrics URL is "
-                "set. Falling back to old loggregator-based metric reporting."
-            )
-            return False
+        logging.warning(
+            "BYPASS_LOGGREGATOR is set to true, but no metrics URL is "
+            "set. Falling back to old loggregator-based metric reporting."
+        )
+        return False
     return False
 
 
@@ -253,9 +246,7 @@ class MetricsServerEmitter(MetricsEmitter):
         try:
             response = requests.post(self.metrics_url, json=stats, timeout=10)
         except Exception:
-            logging.debug(
-                "Failed to send metrics to trends server.", exc_info=True
-            )
+            logging.debug("Failed to send metrics to trends server.", exc_info=True)
             # Fallback to old pipeline and stdout for now.
             # Later, we will want to buffer and resend.
             # This will be done in DEP-75.
@@ -301,7 +292,7 @@ class BaseMetricsEmitterThread(threading.Thread, metaclass=ABCMeta):
     def _set_stats_info(stats):
         stats["version"] = "1.0"
         stats["timestamp"] = datetime.datetime.now().isoformat()
-        stats["instance_index"] = os.getenv("CF_INSTANCE_INDEX", 0)
+        stats["instance_index"] = int(os.getenv("CF_INSTANCE_INDEX", "0"))
         return stats
 
     def emit(self, stats):
@@ -326,9 +317,7 @@ class BaseMetricsEmitterThread(threading.Thread, metaclass=ABCMeta):
         pass
 
     def run(self):
-        logging.debug(
-            "Starting metrics emitter with interval %d" % self.interval
-        )
+        logging.debug("Starting metrics emitter with interval %d", self.interval)
         while True:
             stats = self._gather_metrics()
             stats = self._set_stats_info(stats)
@@ -345,8 +334,7 @@ class BaseMetricsEmitterThread(threading.Thread, metaclass=ABCMeta):
             if health_response.has_error():
                 if (
                     health_response.get_result() == 3
-                    and health_response.get_cause()
-                    == "java.lang.IllegalArgument"
+                    and health_response.get_cause() == "java.lang.IllegalArgument"
                     "Exception: Action should not be null"
                 ):
                     # Because of an incomplete implementation,
@@ -356,8 +344,7 @@ class BaseMetricsEmitterThread(threading.Thread, metaclass=ABCMeta):
                     health["health"] = translation["unknown"]
                     health["diagnosis"] = "No health check microflow defined"
                 elif (
-                    health_response.get_result()
-                    == health_response.ERR_ACTION_NOT_FOUND
+                    health_response.get_result() == health_response.ERR_ACTION_NOT_FOUND
                 ):
                     # Admin action 'check_health' does not exist.
                     health["health"] = translation["unknown"]
@@ -365,8 +352,8 @@ class BaseMetricsEmitterThread(threading.Thread, metaclass=ABCMeta):
                 else:
                     health["health"] = translation["critical"]
                     health["diagnosis"] = (
-                        "Health check failed unexpectedly: %s"
-                        % health_response.get_error()
+                        "Health check failed unexpectedly: "
+                        f"{health_response.get_error()}"
                     )
             else:
                 feedback = health_response.get_feedback()
@@ -375,10 +362,10 @@ class BaseMetricsEmitterThread(threading.Thread, metaclass=ABCMeta):
                     feedback["diagnosis"] if "diagnosis" in feedback else ""
                 )
                 health["response"] = health_response._json
-        except Exception as e:
-            logging.warn("Metrics: Failed to get health status, " + str(e))
+        except Exception as exc:
+            logging.warning("Metrics: Failed to get health status %s", str(exc))
             health["health"] = translation["critical"]
-            health["diagnosis"] = "Health check failed unexpectedly: %s" % e
+            health["diagnosis"] = f"Health check failed unexpectedly: {exc}"
         return stats
 
     @staticmethod
@@ -435,9 +422,7 @@ class BaseMetricsEmitterThread(threading.Thread, metaclass=ABCMeta):
     def _inject_critical_log_stats(self, stats):
         critical_logs_count = 0
         try:
-            critical_logs_count = len(
-                self.m2ee.client.get_critical_log_messages()
-            )
+            critical_logs_count = len(self.m2ee.client.get_critical_log_messages())
         except Exception:
             logging.warning("Unable to get critical logs count from runtime")
         finally:
@@ -445,9 +430,7 @@ class BaseMetricsEmitterThread(threading.Thread, metaclass=ABCMeta):
             # port and we continue to fetch that even after the micrometer metrics
             if "mendix_runtime" not in stats:
                 stats["mendix_runtime"] = {}
-            stats["mendix_runtime"][
-                "critical_logs_count"
-            ] = critical_logs_count
+            stats["mendix_runtime"]["critical_logs_count"] = critical_logs_count
         return stats
 
     def _inject_jvm_failure_metrics(self, stats):
@@ -465,17 +448,15 @@ class BaseMetricsEmitterThread(threading.Thread, metaclass=ABCMeta):
         runtime_version = runtime.get_runtime_version()
         try:
             storage_stats["get_number_of_files"] = self._get_number_of_files()
-        except Exception as e:
-            logging.warn(
-                "Metrics: Failed to retrieve number of files, " + str(e)
-            )
+        except Exception as exc:
+            logging.warning("Metrics: Failed to retrieve number of files, %s", str(exc))
             raise
         if runtime_version >= MXVersion("7.4.0"):
             try:
                 storage_stats["get_size_of_files"] = self._get_size_of_files()
-            except Exception as e:
-                logging.warn(
-                    "Metrics: Failed to retrieve size of files, " + str(e)
+            except Exception as exc:
+                logging.warning(
+                    "Metrics: Failed to retrieve size of files, %s", str(exc)
                 )
                 raise
         stats["storage"] = storage_stats
@@ -487,14 +468,14 @@ class BaseMetricsEmitterThread(threading.Thread, metaclass=ABCMeta):
 
         try:
             index_size = self._get_database_index_size()
-        except psycopg2.OperationalError as err:
+        except psycopg2.OperationalError:
             # For basic apps using Aurora serverless, db connections
             # are closed every day. Handle this db connection error gracefully
             # and need not proceed collecting db stats for this round.
             # https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-serverless.html#aurora-serverless.limitations
             # The database connection will be refreshed in the next round
             # of stats collection.
-            logging.warn(
+            logging.warning(
                 "Database is currently not reachable. Failed to gather database stats."
             )
             return stats
@@ -562,7 +543,7 @@ class BaseMetricsEmitterThread(threading.Thread, metaclass=ABCMeta):
                 "       tup_updated, "
                 "       tup_deleted "
                 "FROM pg_stat_database "
-                "WHERE datname = '%s';" % (db_config["DatabaseName"],)
+                f"WHERE datname = '{db_config['DatabaseName']}';"
             )
             rows = cursor.fetchall()
             return {
@@ -578,9 +559,7 @@ class BaseMetricsEmitterThread(threading.Thread, metaclass=ABCMeta):
         conn = self._get_db_conn()
         db_config = database.get_config()
         with conn.cursor() as cursor:
-            cursor.execute(
-                "SELECT pg_database_size('%s');" % (db_config["DatabaseName"],)
-            )
+            cursor.execute(f"SELECT pg_database_size('{db_config['DatabaseName']}');")
             rows = cursor.fetchall()
             return int_or_default(rows[0][0])
 
@@ -618,7 +597,7 @@ WHERE t.schemaname='public';
 
         with conn.cursor() as cursor:
             cursor.execute(
-                "SELECT COUNT(id) from system$filedocument WHERE hascontents=true;"  # noqa:E501
+                "SELECT COUNT(id) from system$filedocument WHERE hascontents=true;"  # noqa:line-too-long
             )
             rows = cursor.fetchall()
             if len(rows) == 0:
@@ -629,7 +608,7 @@ WHERE t.schemaname='public';
         conn = self._get_db_conn()
         with conn.cursor() as cursor:
             cursor.execute(
-                "SELECT SUM(size) from system$filedocument WHERE hascontents=true;"  # noqa:E501
+                "SELECT SUM(size) from system$filedocument WHERE hascontents=true;"  # noqa:line-too-long
             )
             rows = cursor.fetchall()
             if len(rows) == 0:
@@ -651,8 +630,7 @@ WHERE t.schemaname='public';
                 )
             if db_config["DatabaseType"] != "PostgreSQL":
                 raise Exception(
-                    "Metrics only supports postgresql, not %s"
-                    % db_config["DatabaseType"]
+                    f"Metrics only supports postgresql, not {db_config['DatabaseType']}"
                 )
 
             host, port = self._get_db_host_and_port(db_config["DatabaseHost"])
@@ -665,9 +643,7 @@ WHERE t.schemaname='public';
                 port=port,
                 connect_timeout=3,
             )
-            self.db.set_isolation_level(
-                psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT
-            )
+            self.db.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
         return self.db
 
     @staticmethod
@@ -728,9 +704,7 @@ class PaidAppsMetricsEmitterThread(BaseMetricsEmitterThread):
 
 class FreeAppsMetricsEmitterThread(BaseMetricsEmitterThread):
     def _get_munin_stats(self):
-        m2ee_stats, _ = munin.get_stats_from_runtime(
-            self.m2ee.client, self.m2ee.config
-        )
+        m2ee_stats, _ = munin.get_stats_from_runtime(self.m2ee.client, self.m2ee.config)
         return m2ee_stats
 
     def _inject_user_session_metrics(self, stats):

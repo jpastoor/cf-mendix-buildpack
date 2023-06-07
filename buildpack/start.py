@@ -8,6 +8,7 @@ import traceback
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from buildpack import databroker, util
+from buildpack.databroker import business_events
 from buildpack.core import java, nginx, runtime
 from buildpack.infrastructure import database, storage
 from buildpack.telemetry import (
@@ -58,15 +59,24 @@ def _kill_process_group():
             process_group = os.getpgrp()
             os.killpg(process_group, signum)
             logging.debug(
-                "Successfully sent [{}] to process group [{}]".format(
-                    signum.name, process_group
-                ),
+                "Successfully sent [%s] to process group [%s]",
+                signum.name,
+                process_group,
             )
         except OSError as error:
             logging.debug(
-                "Failed to send [{}] to process group [{}]: {}".format(
-                    signum.name, process_group, error
-                )
+                "Failed to send [%s] to process group [%s]: (OSError) %s",
+                signum.name,
+                process_group,
+                error,
+            )
+        except SystemExit as error:
+            # Workaround for UPV4-2859 - https://github.com/python/cpython/issues/103512#issuecomment-1541021187
+            logging.debug(
+                "Failed to send [%s] to process group [%s]: (SystemExit) %s",
+                signum.name,
+                process_group,
+                error,
             )
 
     _kill_process_group_with_signal(signal.SIGTERM)
@@ -79,7 +89,8 @@ def _sigchild_handler(_signo, _stack_frame):
 
 
 # Handler for system termination signal (SIGTERM)
-# This is required for Cloud Foundry: https://docs.cloudfoundry.org/devguide/deploy-apps/app-lifecycle.html#shutdown
+# This is required for Cloud Foundry:
+# https://docs.cloudfoundry.org/devguide/deploy-apps/app-lifecycle.html#shutdown
 def _sigterm_handler(_signo, _stack_frame):
     # Call sys.exit() so that all atexit handlers are explicitly called
     sys.exit()
@@ -87,7 +98,8 @@ def _sigterm_handler(_signo, _stack_frame):
 
 # Handler for user signals (e.g. SIGUSR1 and SIGUSR2)
 # These are specified as Java options in etc/m2ee/m2ee.yaml and handle e.g. OOM errors
-# This handler is extensible and can incorporate handle_sigusr() calls in buildpack components
+# This handler is extensible and can incorporate handle_sigusr() calls
+# in buildpack components
 def _sigusr_handler(_signo, _stack_frame):
     # pylint: disable=no-member
     logging.debug("%s received", signal.Signals(_signo).name)
@@ -132,7 +144,8 @@ if __name__ == "__main__":
     try:
         if os.getenv("CF_INSTANCE_INDEX") is None:
             logging.warning(
-                "CF_INSTANCE_INDEX environment variable not found, assuming cluster leader responsibility..."
+                "CF_INSTANCE_INDEX environment variable not found, "
+                "assuming cluster leader responsibility..."
             )
 
         # Initialize the runtime
@@ -151,7 +164,7 @@ if __name__ == "__main__":
         )
         newrelic.update_config(m2ee, application_name)
         appdynamics.update_config(m2ee)
-        dynatrace.update_config(m2ee, application_name)
+        dynatrace.update_config(m2ee)
         splunk.update_config(m2ee)
         fluentbit.update_config(m2ee)
         mx_java_agent.update_config(m2ee)
@@ -159,9 +172,7 @@ if __name__ == "__main__":
         (
             databroker_jmx_instance_cfg,
             databroker_jmx_config_files,
-        ) = databroker_processes.get_datadog_config(
-            datadog._get_user_checks_dir()
-        )
+        ) = databroker_processes.get_datadog_config(datadog._get_user_checks_dir())
         datadog.update_config(
             m2ee,
             model_version=model_version,
@@ -170,15 +181,15 @@ if __name__ == "__main__":
             jmx_config_files=databroker_jmx_config_files,
         )
         nginx.update_config()
+        logging.debug(dir(databroker))
+        logging.debug(dir(business_events))
         databroker.update_config(m2ee)
-        databroker.business_events.update_config(
-            m2ee, util.get_vcap_services_data()
-        )
+        business_events.update_config(m2ee, util.get_vcap_services_data())
 
         # Start components and runtime
         telegraf.run(runtime_version)
         datadog.run(model_version, runtime_version)
-        fluentbit.run()
+        fluentbit.run(model_version, runtime_version)
         metering.run()
         logs.run(m2ee)
         runtime.run(m2ee, logs.get_loglevels())
